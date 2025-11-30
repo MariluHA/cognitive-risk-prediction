@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 import os
 import sys
+from pathlib import Path
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -21,50 +22,33 @@ logger = logging.getLogger(__name__)
 
 # Pydantic Models para validación
 class PredictionRequest(BaseModel):
-    # Datos demográficos básicos
     Age: int = Field(..., description="Edad del paciente (años)")
     EducationLevel: int = Field(..., description="Nivel educativo (años)")
     Gender_1: bool = Field(..., description="Género: 1=Mujer, 0=Hombre")
-    
-    # Medidas físicas y médicas
     BMI: float = Field(..., description="Índice de masa corporal")
     SystolicBP: float = Field(..., description="Presión arterial sistólica")
     DiastolicBP: float = Field(..., description="Presión arterial diastólica")
     CholesterolTotal: float = Field(..., description="Colesterol total")
-    
-    # Condiciones médicas
     Hypertension: int = Field(..., description="Hipertensión (0/1)")
     Diabetes: int = Field(..., description="Diabetes (0/1)")
     CardiovascularDisease: int = Field(..., description="Enfermedad cardiovascular (0/1)")
     Depression: int = Field(..., description="Depresión (0/1)")
     HeadInjury: int = Field(..., description="Lesión en la cabeza (0/1)")
-    
-    # Factores de estilo de vida
     Smoking: int = Field(..., description="Tabaquismo (0/1)")
     AlcoholConsumption: float = Field(..., description="Consumo de alcohol (unidades/semana)")
     PhysicalActivity: float = Field(..., description="Actividad física (horas/semana)")
     DietQuality: float = Field(..., description="Calidad de dieta (1-5)")
     SleepQuality: float = Field(..., description="Calidad del sueño (1-10)")
-    
-    # Historia familiar
     FamilyHistoryAlzheimers: int = Field(..., description="Historia familiar de Alzheimer (0/1)")
-    
-    # Evaluaciones cognitivas
     MMSE: float = Field(..., description="Mini-Mental State Examination (0-30)")
     FunctionalAssessment: float = Field(..., description="Evaluación funcional (1-5)")
     ADL: float = Field(..., description="Actividades de la vida diaria (1-5)")
-    
-    # Síntomas y problemas
     MemoryComplaints: int = Field(..., description="Quejas de memoria (0/1)")
     BehavioralProblems: int = Field(..., description="Problemas conductuales (0/1)")
-    
-    # Variables del modelo
     Diagnosis: int = Field(..., description="Diagnóstico previo (0/1)")
     HighCognitiveRisk: int = Field(..., description="Alto riesgo cognitivo (0/1)")
     HealthRiskIndex: int = Field(..., description="Índice de riesgo de salud (1-5)")
     LifestyleScore: float = Field(..., description="Puntuación de estilo de vida (1-10)")
-    
-    # Variables categóricas
     Ethnicity_1: bool = Field(..., description="Etnia 1 (bool)")
     Ethnicity_2: bool = Field(..., description="Etnia 2 (bool)")
     Ethnicity_3: bool = Field(..., description="Etnia 3 (bool)")
@@ -96,8 +80,42 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Directorio de modelos
-MODELS_DIR = "/workspace/alzheimer_predictor/models"
+
+def get_models_directory():
+    """Buscar la carpeta de modelos en diferentes ubicaciones"""
+    possible_paths = [
+        "/app/models",
+        "/workspace/alzheimer_predictor/models",
+        "./models",
+        os.path.join(os.path.dirname(__file__), "..", "models"),
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"✅ Carpeta de modelos encontrada en: {path}")
+            return path
+    
+    logger.warning(f"⚠️ Carpeta de modelos NO ENCONTRADA")
+    return None
+
+
+def get_static_directory():
+    """Buscar la carpeta static en diferentes ubicaciones"""
+    possible_paths = [
+        "/app/static",
+        "/workspace/alzheimer_predictor/static",
+        "./static",
+        os.path.join(os.path.dirname(__file__), "..", "static"),
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"✅ Carpeta static encontrada en: {path}")
+            return path
+    
+    logger.warning(f"⚠️ Carpeta static NO ENCONTRADA")
+    return None
+
 
 # Variable global para modelos cargados
 loaded_models = {}
@@ -107,6 +125,12 @@ def load_models():
     """Cargar todos los modelos ML al iniciar la aplicación"""
     global loaded_models
     
+    models_dir = get_models_directory()
+    
+    if models_dir is None:
+        logger.error("❌ No se puede localizar la carpeta de modelos")
+        return
+    
     model_files = {
         "random_forest": "random_forest_model.pkl",
         "svm": "svm_model.pkl", 
@@ -115,8 +139,13 @@ def load_models():
     
     for model_name, filename in model_files.items():
         try:
-            filepath = os.path.join(MODELS_DIR, filename)
+            filepath = os.path.join(models_dir, filename)
             logger.info(f"Cargando modelo {model_name} desde {filepath}")
+            
+            if not os.path.exists(filepath):
+                logger.warning(f"⚠️ Archivo no encontrado: {filepath}")
+                loaded_models[model_name] = None
+                continue
             
             with open(filepath, 'rb') as f:
                 model = pickle.load(f)
@@ -130,17 +159,8 @@ def load_models():
 
 
 def prepare_feature_vector(data: Dict[str, Any]) -> np.ndarray:
-    """
-    Preparar vector de características en el orden exacto que esperan los modelos
-    Orden exacto: Age, EducationLevel, BMI, SystolicBP, DiastolicBP, CholesterolTotal,
-    Hypertension, Diabetes, CardiovascularDisease, Depression, HeadInjury, Smoking,
-    AlcoholConsumption, PhysicalActivity, DietQuality, SleepQuality, FamilyHistoryAlzheimers,
-    MMSE, FunctionalAssessment, ADL, MemoryComplaints, BehavioralProblems,
-    HighCognitiveRisk, HealthRiskIndex, LifestyleScore, Gender_1,
-    Ethnicity_1, Ethnicity_2, Ethnicity_3, AgeGroup_70-79, AgeGroup_80-90
-    """
+    """Preparar vector de características en el orden exacto que esperan los modelos"""
     
-    # Valores por defecto para campos no incluidos directamente en la predicción
     behavioral_val = data.get('BehavioralProblems', 0)
     
     feature_vector = np.array([
@@ -186,7 +206,7 @@ def interpret_prediction(prediction: int, model_name: str, confidence: Optional[
     interpretations = {
         0: {
             "title": "Riesgo Bajo de Alzheimer",
-            "message": "Basado en los datos ingresados, el modelo indica un riesgo bajo de desarrollar Alzheimer. Sin embargo, esto no constituye un diagnóstico médico y se recomienda consultar con un profesional de la salud para evaluaciones regulares.",
+            "message": "Basado en los datos ingresados, el modelo indica un riesgo bajo de desarrollar Alzheimer. Sin embargo, esto no constituye un diagnóstico médico.",
             "recommendations": [
                 "Mantener un estilo de vida saludable",
                 "Ejercicio regular y dieta balanceada",
@@ -196,7 +216,7 @@ def interpret_prediction(prediction: int, model_name: str, confidence: Optional[
         },
         1: {
             "title": "Riesgo Elevado de Alzheimer",
-            "message": "El modelo indica un riesgo elevado de desarrollar Alzheimer. Es importante consultar con un neurólogo o especialista para una evaluación completa y desarrollar un plan de seguimiento.",
+            "message": "El modelo indica un riesgo elevado de desarrollar Alzheimer. Es importante consultar con un neurólogo o especialista.",
             "recommendations": [
                 "Consulta médica inmediata",
                 "Evaluación neuropsicológica completa",
@@ -209,7 +229,7 @@ def interpret_prediction(prediction: int, model_name: str, confidence: Optional[
     result = interpretations.get(prediction, interpretations[0])
     
     if confidence:
-        result["message"] += f" (Confianza del modelo: {confidence:.1%})"
+        result["message"] += f" (Confianza: {confidence:.1%})"
     
     return result
 
@@ -220,23 +240,35 @@ async def startup_event():
     logger.info("🚀 Iniciando aplicación de predicción de Alzheimer")
     load_models()
     
-    # Verificar que todos los modelos se cargaron
-    for model_name, model in loaded_models.items():
-        if model is not None:
-            logger.info(f"✅ {model_name} listo")
-        else:
-            logger.warning(f"⚠️ {model_name} no disponible")
+    loaded_count = len([m for m in loaded_models.values() if m is not None])
+    logger.info(f"📊 Modelos cargados: {loaded_count}/3")
+    
+    if loaded_count == 0:
+        logger.warning("⚠️ ADVERTENCIA: Ningún modelo se ha cargado correctamente")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
     """Servir la página principal"""
     try:
-        with open("/workspace/alzheimer_predictor/static/index.html", "r", encoding="utf-8") as f:
+        static_dir = get_static_directory()
+        
+        if static_dir is None:
+            logger.error("❌ No se encontró carpeta static")
+            return HTMLResponse(content="<h1>Error: Frontend no encontrado</h1>", status_code=404)
+        
+        html_path = os.path.join(static_dir, "index.html")
+        
+        if not os.path.exists(html_path):
+            logger.error(f"❌ No se encontró index.html en {html_path}")
+            return HTMLResponse(content="<h1>Error: index.html no encontrado</h1>", status_code=404)
+        
+        with open(html_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
+        
     except Exception as e:
         logger.error(f"Error sirviendo frontend: {e}")
-        return HTMLResponse(content="<h1>Error loading application</h1>")
+        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
 
 
 @app.get("/models", response_model=Dict[str, ModelInfo])
@@ -272,10 +304,8 @@ async def predict_alzheimer_risk(request: PredictionRequest):
         # Convertir request a diccionario
         data = request.dict()
         
-        # Determinar modelo (por ahora usar el primero disponible)
-        model_name = "random_forest"  # Por defecto
-        if request.model_name in loaded_models:
-            model_name = request.model_name
+        # Determinar modelo
+        model_name = request.model_name if request.model_name in loaded_models else "random_forest"
         
         # Verificar que el modelo esté cargado
         if loaded_models[model_name] is None:
@@ -289,12 +319,10 @@ async def predict_alzheimer_risk(request: PredictionRequest):
         model = loaded_models[model_name]
         
         if hasattr(model, 'predict_proba'):
-            # Obtener probabilidades si están disponibles
             probabilities = model.predict_proba(feature_vector)[0]
             prediction = model.predict(feature_vector)[0]
             confidence = max(probabilities)
         else:
-            # Solo predicción binaria
             prediction = model.predict(feature_vector)[0]
             confidence = None
         
@@ -324,16 +352,19 @@ async def predict_alzheimer_risk(request: PredictionRequest):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    models_loaded = len([m for m in loaded_models.values() if m is not None])
     return {
-        "status": "healthy",
+        "status": "healthy" if models_loaded > 0 else "degraded",
         "timestamp": datetime.now().isoformat(),
-        "models_loaded": len([m for m in loaded_models.values() if m is not None])
+        "models_loaded": f"{models_loaded}/3"
     }
 
 
 # Montar archivos estáticos
-if os.path.exists("/workspace/alzheimer_predictor/static"):
-    app.mount("/", StaticFiles(directory="/workspace/alzheimer_predictor/static", html=True), name="static")
+static_dir = get_static_directory()
+if static_dir:
+    app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
+    logger.info(f"✅ Archivos estáticos montados desde: {static_dir}")
 
 
 if __name__ == "__main__":
