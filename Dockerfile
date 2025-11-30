@@ -10,20 +10,15 @@ RUN apt-get update && apt-get install -y \
 # Configurar directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copiar dependencias
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar aplicación
 COPY backend/ ./backend/
-COPY frontend/ ./static/
+COPY frontend/ ./frontend/       # ← AGREGADO (IMPORTANTE)
+COPY static/ ./static/           # ← Usa tu static real
 COPY models/ ./models/
-
-# Crear directorios necesarios
-RUN mkdir -p /app/static
-
-# Copiar archivos estáticos
-RUN cp frontend/index.html static/index.html
 
 # Exponer puerto
 EXPOSE 8000
