@@ -1,0 +1,32 @@
+# Configuración para Render.com
+# render.yaml
+
+services:
+  - type: web
+    name: alzheimer-predictor
+    env: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: PYTHONUNBUFFERED  
+        value: 1
+      - key: MODELS_DIR
+        value: /app/models
+    
+    # Configurar para acceso a archivos estáticos
+    staticFiles:
+      - directory: ./static
+        url: /
+        indexFile: index.html
+
+    # Recursos
+    instanceClass: free
+    
+  # Para base de datos (si se necesita en el futuro)
+  # - type: redis
+  #   name: alzheimer-redis
+  #   maxmemoryPolicy: allkeys-lru

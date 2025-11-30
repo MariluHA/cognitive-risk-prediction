@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predictor de Riesgo de Alzheimer</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Configuración de campos del formulario con valores por defecto
+        const formFields = [
+            // Datos demográficos básicos
+            { key: 'Age', label: 'Edad', type: 'number', default: 78, min: 18, max: 100, description: 'Edad del paciente en años' },
+            { key: 'EducationLevel', label: 'Nivel Educativo', type: 'number', default: 12, min: 0, max: 20, description: 'Años de educación completados' },
+            
+            // Medidas físicas y médicas
+            { key: 'BMI', label: 'Índice de Masa Corporal', type: 'number', default: 25.4, step: 0.1, min: 15, max: 50, description: 'IMC del paciente' },
+            { key: 'SystolicBP', label: 'Presión Arterial Sistólica', type: 'number', default: 138, min: 80, max: 200, description: 'Presión arterial sistólica (mmHg)' },
+            { key: 'DiastolicBP', label: 'Presión Arterial Diastólica', type: 'number', default: 82, min: 50, max: 120, description: 'Presión arterial diastólica (mmHg)' },
+            { key: 'CholesterolTotal', label: 'Colesterol Total', type: 'number', default: 205, min: 100, max: 400, description: 'Colesterol total (mg/dL)' },
+            
+            // Condiciones médicas
+            { key: 'Hypertension', label: 'Hipertensión', type: 'checkbox', default: true, description: '¿Tiene hipertensión?' },
+            { key: 'Diabetes', label: 'Diabetes', type: 'checkbox', default: false, description: '¿Tiene diabetes?' },
+            { key: 'CardiovascularDisease', label: 'Enfermedad Cardiovascular', type: 'checkbox', default: true, description: '¿Tiene enfermedad cardiovascular?' },
+            { key: 'Depression', label: 'Depresión', type: 'checkbox', default: false, description: '¿Tiene depresión?' },
+            { key: 'HeadInjury', label: 'Lesión en la Cabeza', type: 'checkbox', default: false, description: '¿Ha tenido lesiones en la cabeza?' },
+            
+            // Factores de estilo de vida
+            { key: 'Smoking', label: 'Tabaquismo', type: 'checkbox', default: true, description: '¿Fuma actualmente?' },
+            { key: 'AlcoholConsumption', label: 'Consumo de Alcohol', type: 'number', default: 1.2, step: 0.1, min: 0, max: 10, description: 'Unidades de alcohol por semana' },
+            { key: 'PhysicalActivity', label: 'Actividad Física', type: 'number', default: 3.0, step: 0.1, min: 0, max: 14, description: 'Horas de actividad física por semana' },
+            { key: 'DietQuality', label: 'Calidad de Dieta', type: 'number', default: 2.8, step: 0.1, min: 1, max: 5, description: 'Calidad de dieta (1=Pobre, 5=Excelente)' },
+            { key: 'SleepQuality', label: 'Calidad del Sueño', type: 'number', default: 6.5, step: 0.1, min: 1, max: 10, description: 'Calidad del sueño (1=Muy mala, 10=Excelente)' },
+            
+            // Historia familiar
+            { key: 'FamilyHistoryAlzheimers', label: 'Historia Familiar de Alzheimer', type: 'checkbox', default: true, description: '¿Tiene familiares con Alzheimer?' },
+            
+            // Evaluaciones cognitivas
+            { key: 'MMSE', label: 'Puntuación MMSE', type: 'number', default: 22.5, step: 0.5, min: 0, max: 30, description: 'Mini-Mental State Examination (0-30)' },
+            { key: 'FunctionalAssessment', label: 'Evaluación Funcional', type: 'number', default: 3.1, step: 0.1, min: 1, max: 5, description: 'Evaluación de funciones diarias (1-5)' },
+            { key: 'ADL', label: 'Actividades de Vida Diaria', type: 'number', default: 4.2, step: 0.1, min: 1, max: 5, description: 'Capacidad para actividades diarias (1-5)' },
+            
+            // Síntomas y problemas
+            { key: 'MemoryComplaints', label: 'Quejas de Memoria', type: 'checkbox', default: true, description: '¿Tiene quejas sobre la memoria?' },
+            { key: 'BehavioralProblems', label: 'Problemas Conductuales', type: 'checkbox', default: false, description: '¿Tiene problemas conductuales?' },
+            
+            // Variables del modelo
+            { key: 'Diagnosis', label: 'Diagnóstico Previo', type: 'checkbox', default: true, description: '¿Tiene diagnóstico previo?' },
+            { key: 'HighCognitiveRisk', label: 'Alto Riesgo Cognitivo', type: 'checkbox', default: true, description: '¿Alto riesgo cognitivo?' },
+            { key: 'HealthRiskIndex', label: 'Índice de Riesgo de Salud', type: 'number', default: 3, min: 1, max: 5, description: 'Índice de riesgo de salud (1-5)' },
+            { key: 'LifestyleScore', label: 'Puntuación de Estilo de Vida', type: 'number', default: 5.4, step: 0.1, min: 1, max: 10, description: 'Puntuación de estilo de vida (1-10)' },
+            
+            // Variables categóricas
+            { key: 'Gender_1', label: 'Género (Mujer)', type: 'checkbox', default: true, description: 'Marcar si es mujer' },
+            { key: 'Ethnicity_1', label: 'Etnia 1', type: 'checkbox', default: false, description: 'Pertenece a etnia 1' },
+            { key: 'Ethnicity_2', label: 'Etnia 2', type: 'checkbox', default: true, description: 'Pertenece a etnia 2' },
+            { key: 'Ethnicity_3', label: 'Etnia 3', type: 'checkbox', default: false, description: 'Pertenece a etnia 3' },
+            { key: 'AgeGroup_70_79', label: 'Grupo de Edad 70-79', type: 'checkbox', default: true, description: 'Edad entre 70-79 años' },
+            { key: 'AgeGroup_80_90', label: 'Grupo de Edad 80-90', type: 'checkbox', default: false, description: 'Edad entre 80-90 años' }
+        ];
+
+        const App = () => {
+            const [formData, setFormData] = useState({});
+            const [selectedModel, setSelectedModel] = useState('random_forest');
+            const [prediction, setPrediction] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            // Inicializar formulario con valores por defecto
+            useEffect(() => {
+                const initialData = {};
+                formFields.forEach(field => {
+                    initialData[field.key] = field.default;
+                });
+                setFormData(initialData);
+            }, []);
+
+            const handleInputChange = (fieldKey, value) => {
+                setFormData(prev => ({
+                    ...prev,
+                    [fieldKey]: value
+                }));
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError(null);
+                setPrediction(null);
+
+                try {
+                    const response = await fetch('/predict', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            ...formData,
+                            model_name: selectedModel
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Error: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    setPrediction(result);
+                } catch (err) {
+                    setError(`Error al realizar la predicción: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const resetForm = () => {
+                const initialData = {};
+                formFields.forEach(field => {
+                    initialData[field.key] = field.default;
+                });
+                setFormData(initialData);
+                setPrediction(null);
+                setError(null);
+            };
+
+            const renderField = (field) => {
+                const value = formData[field.key] || field.default;
+
+                switch (field.type) {
+                    case 'checkbox':
+                        return (
+                            <div className="flex items-center space-x-3">
+                                <input
+                                    type="checkbox"
+                                    id={field.key}
+                                    checked={value}
+                                    onChange={(e) => handleInputChange(field.key, e.target.checked)}
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <label htmlFor={field.key} className="text-sm font-medium text-gray-700">
+                                    {value ? 'Sí' : 'No'}
+                                </label>
+                            </div>
+                        );
+                    
+                    case 'number':
+                        return (
+                            <input
+                                type="number"
+                                id={field.key}
+                                value={value}
+                                onChange={(e) => handleInputChange(field.key, parseFloat(e.target.value))}
+                                min={field.min}
+                                max={field.max}
+                                step={field.step || 1}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        );
+                    
+                    default:
+                        return (
+                            <input
+                                type="text"
+                                id={field.key}
+                                value={value}
+                                onChange={(e) => handleInputChange(field.key, e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        );
+                }
+            };
+
+            // Agrupar campos por categoría
+            const fieldGroups = [
+                { title: 'Datos Demográficos Básicos', fields: ['Age', 'EducationLevel'] },
+                { title: 'Medidas Físicas y Médicas', fields: ['BMI', 'SystolicBP', 'DiastolicBP', 'CholesterolTotal'] },
+                { title: 'Condiciones Médicas', fields: ['Hypertension', 'Diabetes', 'CardiovascularDisease', 'Depression', 'HeadInjury'] },
+                { title: 'Factores de Estilo de Vida', fields: ['Smoking', 'AlcoholConsumption', 'PhysicalActivity', 'DietQuality', 'SleepQuality'] },
+                { title: 'Historia Familiar', fields: ['FamilyHistoryAlzheimers'] },
+                { title: 'Evaluaciones Cognitivas', fields: ['MMSE', 'FunctionalAssessment', 'ADL'] },
+                { title: 'Síntomas y Problemas', fields: ['MemoryComplaints', 'BehavioralProblems'] },
+                { title: 'Variables del Modelo', fields: ['Diagnosis', 'HighCognitiveRisk', 'HealthRiskIndex', 'LifestyleScore'] },
+                { title: 'Variables Categóricas', fields: ['Gender_1', 'Ethnicity_1', 'Ethnicity_2', 'Ethnicity_3', 'AgeGroup_70_79', 'AgeGroup_80_90'] }
+            ];
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Header */}
+                    <header className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center py-6">
+                                <div className="flex items-center">
+                                    <i className="fas fa-brain text-blue-600 text-2xl mr-3"></i>
+                                    <h1 className="text-3xl font-bold text-gray-900">
+                                        Predictor de Riesgo de Alzheimer
+                                    </h1>
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                    Sistema de Predicción ML
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* Formulario Principal */}
+                            <div className="lg:col-span-2">
+                                <div className="bg-white shadow-lg rounded-lg">
+                                    <div className="px-6 py-4 border-b border-gray-200">
+                                        <h2 className="text-xl font-semibold text-gray-900">
+                                            Evaluación de Riesgo de Alzheimer
+                                        </h2>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            Complete el formulario con la información del paciente para obtener una evaluación de riesgo
+                                        </p>
+                                    </div>
+
+                                    <form onSubmit={handleSubmit} className="p-6">
+                                        {/* Selector de Modelo */}
+                                        <div className="mb-6">
+                                            <label htmlFor="model-select" className="block text-sm font-medium text-gray-700 mb-2">
+                                                <i className="fas fa-robot mr-2"></i>Seleccionar Modelo de Predicción
+                                            </label>
+                                            <select
+                                                id="model-select"
+                                                value={selectedModel}
+                                                onChange={(e) => setSelectedModel(e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="random_forest">Random Forest</option>
+                                                <option value="svm">Support Vector Machine (SVM)</option>
+                                                <option value="xgboost">XGBoost</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Campos del formulario agrupados */}
+                                        {fieldGroups.map((group, groupIndex) => (
+                                            <div key={groupIndex} className="mb-8">
+                                                <h3 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-200">
+                                                    {group.title}
+                                                </h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {group.fields.map(fieldKey => {
+                                                        const field = formFields.find(f => f.key === fieldKey);
+                                                        if (!field) return null;
+                                                        
+                                                        return (
+                                                            <div key={field.key}>
+                                                                <label htmlFor={field.key} className="block text-sm font-medium text-gray-700 mb-1">
+                                                                    {field.label}
+                                                                </label>
+                                                                {renderField(field)}
+                                                                <p className="mt-1 text-xs text-gray-500">
+                                                                    {field.description}
+                                                                </p>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {/* Botones de acción */}
+                                        <div className="flex justify-between items-center pt-6 border-t border-gray-200">
+                                            <button
+                                                type="button"
+                                                onClick={resetForm}
+                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                            >
+                                                <i className="fas fa-undo mr-2"></i>Restablecer Valores
+                                            </button>
+                                            
+                                            <button
+                                                type="submit"
+                                                disabled={loading}
+                                                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {loading ? (
+                                                    <>
+                                                        <i className="fas fa-spinner fa-spin mr-2"></i>Analizando...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="fas fa-chart-line mr-2"></i>Evaluar Riesgo
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            {/* Panel de Resultados */}
+                            <div className="lg:col-span-1">
+                                <div className="bg-white shadow-lg rounded-lg p-6 sticky top-8">
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                                        <i className="fas fa-chart-pie mr-2"></i>Resultados
+                                    </h3>
+                                    
+                                    {error && (
+                                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+                                            <div className="flex">
+                                                <i className="fas fa-exclamation-triangle text-red-400 mr-2"></i>
+                                                <p className="text-sm text-red-700">{error}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {prediction && (
+                                        <div className="space-y-4">
+                                            {/* Resultado principal */}
+                                            <div className={`p-4 rounded-lg border-2 ${
+                                                prediction.risk_level === 'Alto' 
+                                                    ? 'bg-red-50 border-red-200' 
+                                                    : 'bg-green-50 border-green-200'
+                                            }`}>
+                                                <div className="flex items-center mb-2">
+                                                    <i className={`fas ${
+                                                        prediction.risk_level === 'Alto' 
+                                                            ? 'fa-exclamation-triangle text-red-500' 
+                                                            : 'fa-check-circle text-green-500'
+                                                    } mr-2`}></i>
+                                                    <h4 className={`font-semibold ${
+                                                        prediction.risk_level === 'Alto' ? 'text-red-800' : 'text-green-800'
+                                                    }`}>
+                                                        {prediction.prediction}
+                                                    </h4>
+                                                </div>
+                                                
+                                                {prediction.confidence && (
+                                                    <p className={`text-sm ${
+                                                        prediction.risk_level === 'Alto' ? 'text-red-700' : 'text-green-700'
+                                                    }`}>
+                                                        Confianza: {(prediction.confidence * 100).toFixed(1)}%
+                                                    </p>
+                                                )}
+                                                
+                                                <p className={`text-sm mt-2 ${
+                                                    prediction.risk_level === 'Alto' ? 'text-red-700' : 'text-green-700'
+                                                }`}>
+                                                    Modelo: {prediction.model_used}
+                                                </p>
+                                            </div>
+
+                                            {/* Interpretación */}
+                                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+                                                <h5 className="font-medium text-blue-800 mb-2">Interpretación</h5>
+                                                <p className="text-sm text-blue-700">
+                                                    {prediction.interpretation}
+                                                </p>
+                                            </div>
+
+                                            {/* Información técnica */}
+                                            <div className="text-xs text-gray-500 border-t pt-4">
+                                                <p><strong>Timestamp:</strong> {new Date(prediction.timestamp).toLocaleString()}</p>
+                                                <p><strong>Modelo usado:</strong> {prediction.model_used}</p>
+                                            </div>
+
+                                            {/* Botón para nueva evaluación */}
+                                            <button
+                                                onClick={() => { setPrediction(null); setError(null); }}
+                                                className="w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                            >
+                                                <i className="fas fa-plus mr-2"></i>Nueva Evaluación
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {!prediction && !loading && !error && (
+                                        <div className="text-center text-gray-500">
+                                            <i className="fas fa-clipboard-list text-4xl mb-4"></i>
+                                            <p>Complete el formulario y haga clic en "Evaluar Riesgo" para obtener resultados</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <footer className="bg-white border-t mt-16">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                            <div className="text-center text-sm text-gray-500">
+                                <p className="mb-2">
+                                    <i className="fas fa-info-circle mr-1"></i>
+                                    <strong>Aviso importante:</strong> Esta herramienta es solo para fines educativos e informativos.
+                                </p>
+                                <p>
+                                    No constituye un diagnóstico médico. Consulte siempre con un profesional de la salud para evaluaciones clínicas reales.
+                                </p>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
