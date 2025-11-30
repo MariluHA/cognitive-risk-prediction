@@ -12,6 +12,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ⭐⭐⭐ AGREGAR ESTA LÍNEA AQUÍ (requests debe estar antes) ⭐⭐⭐
+RUN pip install --no-cache-dir requests
+
 # Copiar aplicación
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
