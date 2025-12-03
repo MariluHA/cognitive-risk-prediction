@@ -133,7 +133,7 @@
             };
 
             const renderField = (field) => {
-                const value = formData[field.key] || field.default;
+                const value = formData[field.key] !== undefined ? formData[field.key] : field.default;
 
                 switch (field.type) {
                     case 'checkbox':
@@ -142,11 +142,11 @@
                                 <input
                                     type="checkbox"
                                     id={field.key}
-                                    checked={value}
+                                    checked={Boolean(value)}
                                     onChange={(e) => handleInputChange(field.key, e.target.checked)}
-                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                                 />
-                                <label htmlFor={field.key} className="text-sm font-medium text-gray-700">
+                                <label htmlFor={field.key} className="text-sm font-medium text-gray-700 cursor-pointer">
                                     {value ? 'Sí' : 'No'}
                                 </label>
                             </div>
@@ -158,11 +158,29 @@
                                 type="number"
                                 id={field.key}
                                 value={value}
-                                onChange={(e) => handleInputChange(field.key, parseFloat(e.target.value))}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    // Permitir campo vacío mientras se escribe
+                                    if (val === '') {
+                                        handleInputChange(field.key, '');
+                                    } else {
+                                        const numVal = parseFloat(val);
+                                        if (!isNaN(numVal)) {
+                                            handleInputChange(field.key, numVal);
+                                        }
+                                    }
+                                }}
+                                onBlur={(e) => {
+                                    // Al perder foco, asegurar que hay un valor válido
+                                    const val = e.target.value;
+                                    if (val === '' || isNaN(parseFloat(val))) {
+                                        handleInputChange(field.key, field.default);
+                                    }
+                                }}
                                 min={field.min}
                                 max={field.max}
                                 step={field.step || 1}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         );
                     
@@ -173,7 +191,7 @@
                                 id={field.key}
                                 value={value}
                                 onChange={(e) => handleInputChange(field.key, e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         );
                 }
